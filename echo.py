@@ -17,7 +17,7 @@ from openai import OpenAI as OpenAIClient  # Renamed to avoid conflict
 
 # ------------------ Load API & Init Model ------------------
 load_dotenv()
-openai_api_key = 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
+openai_api_key = "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"
 
 if not openai_api_key:
     st.error("❌ OpenAI API key not found. Please set OPENAI_API_KEY in your .env file.")
