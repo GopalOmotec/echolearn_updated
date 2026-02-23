@@ -188,3 +188,13 @@ node_modules/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+.env
+venv/
+env/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+.streamlit/secrets.toml

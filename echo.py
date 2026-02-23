@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import fitz  # PyMuPDF
-from langchain_openai import OpenAI, ChatOpenAI
-from dotenv import load_dotenv
+from   langchain_openai import OpenAI, ChatOpenAI
+from   dotenv import load_dotenv
 import os
 import io
 import pyttsx3
@@ -11,8 +11,9 @@ import numpy as np
 import scipy.io.wavfile as wav
 import speech_recognition as sr
 import time
-from auth import auth_manager
-from database import db_manager
+from   auth import auth_manager
+from   database import db_manager
+from openai import OpenAI as OpenAIClient  # Renamed to avoid conflict
 
 # ------------------ Load API & Init Model ------------------
 load_dotenv()
@@ -22,11 +23,15 @@ if not openai_api_key:
     st.error("❌ OpenAI API key not found. Please set OPENAI_API_KEY in your .env file.")
     st.stop()
 
+# Initialize OpenAI clients
 llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0,
     openai_api_key=openai_api_key
 )
+
+# Initialize OpenAI TTS client
+tts_client = OpenAIClient(api_key=openai_api_key)
 
 # ------------------ Authentication Check ------------------
 auth_manager.require_authentication()
@@ -578,6 +583,32 @@ def get_difficulty_from_level(level):
     }
     return mapping.get(level, 10)
 
+# ------------------ OpenAI TTS Function ------------------
+def text_to_speech_human_like(text, voice="alloy"):
+    """
+    Convert text to speech using OpenAI's TTS with human-like voices
+    Available voices: alloy, echo, fable, onyx, nova, shimmer
+    """
+    try:
+        # Create speech using OpenAI TTS
+        speech_response = tts_client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice=voice,  # Options: alloy, echo, fable, onyx, nova, shimmer
+            input=text,
+            speed=1.0  # Normal speed for natural conversation
+        )
+        
+        # Save to a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
+            temp_mp3_path = tmp_file.name
+            speech_response.stream_to_file(temp_mp3_path)
+        
+        return temp_mp3_path
+    except Exception as e:
+        st.warning(f"OpenAI TTS failed: {e}")
+        return None
+
 # ------------------ Selective Mutism Support Functions ------------------
 def update_confidence_level(success):
     """Update confidence level based on success/failure"""
@@ -734,15 +765,46 @@ if st.session_state.all_qas:
         current_qa_difficulty = qa.get('difficulty', get_difficulty_from_level(qa['level']))
         st.info(f"🎯 Current Target Difficulty: {st.session_state.current_difficulty} | This Question: {current_qa_difficulty}")
 
-
-    # TTS using pyttsx3 - always available as it helps with comprehension
-    if st.button("🔊 Read Question Aloud"):
-        try:
-            engine = pyttsx3.init()
-            engine.say(qa["question"])
-            engine.runAndWait()
-        except Exception as e:
-            st.warning(f"TTS failed: {e}")
+    # TTS using OpenAI with human-like voice
+    tts_col1, tts_col2 = st.columns([3, 1])
+    with tts_col1:
+        # Voice selection for TTS
+        voice_options = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+        selected_voice = st.selectbox(
+            "Choose voice:", 
+            voice_options, 
+            index=0,
+            help="Select a different voice for the AI reader"
+        )
+    with tts_col2:
+        if st.button("🔊 Read Question Aloud (Human Voice)"):
+            with st.spinner("Generating human-like speech..."):
+                temp_audio_file = text_to_speech_human_like(qa["question"], voice=selected_voice)
+                
+                if temp_audio_file:
+                    # Read the audio file and play it
+                    import base64
+                    with open(temp_audio_file, "rb") as f:
+                        audio_bytes = f.read()
+                    
+                    # Create audio player
+                    st.audio(audio_bytes, format="audio/mp3")
+                    
+                    # Clean up temp file
+                    import os
+                    try:
+                        os.unlink(temp_audio_file)
+                    except:
+                        pass
+                else:
+                    # Fallback to pyttsx3
+                    try:
+                        engine = pyttsx3.init()
+                        engine.say(qa["question"])
+                        engine.runAndWait()
+                        st.info("Used system voice as fallback")
+                    except Exception as e:
+                        st.warning(f"Could not play audio: {e}")
 
     # Audio recording - enhanced encouragement in selective mutism training mode
     if st.session_state.selective_mutism_mode:
@@ -1388,6 +1450,3 @@ def display_adaptive_progress():
             st.info("📉 Focusing on strengthening fundamentals")
         else:
             st.info("🎯 Maintaining consistent challenge level")
-
-
-

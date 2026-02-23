@@ -11,7 +11,7 @@ import librosa.display
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
+from   plotly.subplots import make_subplots
 import sounddevice as sd
 import soundfile as sf
 import io
